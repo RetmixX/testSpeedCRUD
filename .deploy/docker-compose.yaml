@@ -1,0 +1,76 @@
+version: '3'
+
+networks:
+  services:
+    driver: bridge
+
+services:
+  proxy:
+    build:
+      context: ..
+      dockerfile: .deploy/nginx/Dockerfile
+    ports:
+      - "${PROXY_PORT:-80}:80"
+    volumes:
+      - ../php:/project
+    depends_on:
+      - php-api
+      - kotlin
+    networks:
+      - services
+
+  php-api:
+    build:
+      context: ..
+      dockerfile: .deploy/php/nginx/Dockerfile
+    depends_on:
+      - php
+    networks:
+      - services
+    volumes:
+      - ../php:/project
+
+  php:
+    build:
+      context: ..
+      dockerfile: .deploy/php/Dockerfile
+      args:
+        USER: ${USER:-user}
+    entrypoint: ["/bin/sh", "-c", "composer install && yes | php-fpm"]
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=${DB_NAME:-postgres}
+      - DB_USERNAME=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    volumes:
+      - ../php:/project
+    networks:
+      - services
+    depends_on:
+      - db
+
+  kotlin:
+    build:
+      context: ..
+      dockerfile: .deploy/kotlin/Dockerfile
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    networks:
+      - services
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-postgres}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    networks:
+      - services
+    ports:
+      - "5432:5432"
